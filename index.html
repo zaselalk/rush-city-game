@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neon Rush - 3D Racing</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="ui">
+    <div id="hud" style="display: none;">
+      <div class="hud-item">
+        <div class="hud-label">SCORE</div>
+        <div class="hud-value" id="score">0</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">SPEED</div>
+        <div class="hud-value" id="speed">0</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">DISTANCE</div>
+        <div class="hud-value" id="distance">0</div>
+      </div>
+    </div>
+
+    <div id="startScreen">
+      <h1>NEON RUSH</h1>
+      <div class="subtitle">High-Speed 3D Racing</div>
+      <button class="btn" onclick="startGame()"><span>START RACE</span></button>
+      <div class="controls">
+        <strong>← →</strong> Steer Left/Right<br>
+        <strong>↑</strong> Accelerate<br>
+        <strong>↓</strong> Brake<br>
+        Enjoy a scenic drive through the forest!
+      </div>
+    </div>
+
+    <div id="gameOverScreen">
+      <h1>RACE OVER</h1>
+      <div id="finalScore"></div>
+      <button class="btn" onclick="restartGame()"><span>RACE AGAIN</span></button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+
+</html>
