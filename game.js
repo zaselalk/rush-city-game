@@ -323,11 +323,9 @@ function createStars() {
     scene.add(stars);
 }
 
-// Create trees
-function createTree(x, z) {
+// Create pine/conifer tree
+function createPineTree(x, z) {
     const treeGroup = new THREE.Group();
-
-    // Randomize tree size for variety
     const scale = 0.8 + Math.random() * 0.6;
 
     // Tree trunk
@@ -342,7 +340,7 @@ function createTree(x, z) {
     trunk.receiveShadow = true;
     treeGroup.add(trunk);
 
-    // Tree foliage (multiple layers for fuller look)
+    // Pine foliage (multiple cone layers)
     const foliageGeometry = new THREE.ConeGeometry(1 * scale, 2.2 * scale, 8);
     const foliageColors = [0x2d5016, 0x3a6b1f, 0x1a4a0f];
     const foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)];
@@ -371,6 +369,190 @@ function createTree(x, z) {
 
     treeGroup.position.set(x, 0, z);
     return treeGroup;
+}
+
+// Create oak/deciduous tree with round canopy
+function createOakTree(x, z) {
+    const treeGroup = new THREE.Group();
+    const scale = 0.9 + Math.random() * 0.5;
+
+    // Thick trunk
+    const trunkGeometry = new THREE.CylinderGeometry(0.2 * scale, 0.35 * scale, 2.5 * scale, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a3520,
+        roughness: 0.95
+    });
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.y = 1.25 * scale;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    treeGroup.add(trunk);
+
+    // Round foliage clusters
+    const foliageColors = [0x4a7c23, 0x3d6b1c, 0x5a8f2a];
+    const foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)];
+    const foliageMaterial = new THREE.MeshStandardMaterial({
+        color: foliageColor,
+        roughness: 0.85
+    });
+
+    // Main canopy - multiple spheres for natural look
+    const canopyPositions = [
+        [0, 3.5 * scale, 0, 1.4 * scale],
+        [-0.5 * scale, 3.2 * scale, 0.3 * scale, 1.0 * scale],
+        [0.5 * scale, 3.3 * scale, -0.2 * scale, 1.1 * scale],
+        [0, 3.8 * scale, -0.4 * scale, 0.9 * scale],
+        [-0.3 * scale, 3.0 * scale, -0.5 * scale, 0.8 * scale],
+    ];
+
+    canopyPositions.forEach(pos => {
+        const foliageGeometry = new THREE.SphereGeometry(pos[3], 8, 8);
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.set(pos[0], pos[1], pos[2]);
+        foliage.castShadow = true;
+        foliage.receiveShadow = true;
+        treeGroup.add(foliage);
+    });
+
+    treeGroup.position.set(x, 0, z);
+    return treeGroup;
+}
+
+// Create birch tree with white bark
+function createBirchTree(x, z) {
+    const treeGroup = new THREE.Group();
+    const scale = 0.8 + Math.random() * 0.4;
+
+    // White/silver trunk with black marks
+    const trunkGeometry = new THREE.CylinderGeometry(0.1 * scale, 0.15 * scale, 3.5 * scale, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0xe8e0d5,
+        roughness: 0.7
+    });
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.y = 1.75 * scale;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    treeGroup.add(trunk);
+
+    // Black bark marks
+    for (let i = 0; i < 5; i++) {
+        const markGeometry = new THREE.BoxGeometry(0.12 * scale, 0.05 * scale, 0.08 * scale);
+        const markMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2a2a2a,
+            roughness: 0.9
+        });
+        const mark = new THREE.Mesh(markGeometry, markMaterial);
+        mark.position.set(
+            0.08 * scale * (Math.random() > 0.5 ? 1 : -1),
+            (0.8 + i * 0.5) * scale,
+            0.08 * scale * (Math.random() > 0.5 ? 1 : -1)
+        );
+        mark.rotation.y = Math.random() * Math.PI;
+        treeGroup.add(mark);
+    }
+
+    // Light green/yellow foliage (smaller leaves)
+    const foliageColors = [0x7cb342, 0x9ccc65, 0x8bc34a];
+    const foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)];
+    const foliageMaterial = new THREE.MeshStandardMaterial({
+        color: foliageColor,
+        roughness: 0.85
+    });
+
+    // Sparse, airy canopy
+    for (let i = 0; i < 4; i++) {
+        const foliageGeometry = new THREE.SphereGeometry(0.6 * scale, 6, 6);
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.set(
+            (Math.random() - 0.5) * 0.8 * scale,
+            (3.5 + Math.random() * 0.8) * scale,
+            (Math.random() - 0.5) * 0.8 * scale
+        );
+        foliage.scale.set(1, 0.8, 1);
+        foliage.castShadow = true;
+        treeGroup.add(foliage);
+    }
+
+    treeGroup.position.set(x, 0, z);
+    return treeGroup;
+}
+
+// Create palm tree
+function createPalmTree(x, z) {
+    const treeGroup = new THREE.Group();
+    const scale = 0.9 + Math.random() * 0.3;
+
+    // Curved trunk segments
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b7355,
+        roughness: 0.9
+    });
+
+    // Build trunk with multiple segments for slight curve
+    for (let i = 0; i < 6; i++) {
+        const segmentGeometry = new THREE.CylinderGeometry(
+            (0.18 - i * 0.015) * scale,
+            (0.2 - i * 0.015) * scale,
+            0.6 * scale,
+            8
+        );
+        const segment = new THREE.Mesh(segmentGeometry, trunkMaterial);
+        segment.position.y = (0.3 + i * 0.55) * scale;
+        segment.position.x = Math.sin(i * 0.15) * 0.1 * scale;
+        segment.castShadow = true;
+        treeGroup.add(segment);
+    }
+
+    // Palm fronds
+    const frondMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2e7d32,
+        roughness: 0.8,
+        side: THREE.DoubleSide
+    });
+
+    const numFronds = 7;
+    for (let i = 0; i < numFronds; i++) {
+        const angle = (i / numFronds) * Math.PI * 2;
+        const frondGroup = new THREE.Group();
+
+        // Frond stem
+        const stemGeometry = new THREE.CylinderGeometry(0.02 * scale, 0.03 * scale, 1.8 * scale, 4);
+        const stem = new THREE.Mesh(stemGeometry, frondMaterial);
+        stem.position.y = 0.9 * scale;
+        stem.rotation.z = -0.6;
+        frondGroup.add(stem);
+
+        // Frond leaves (elongated shape)
+        const leafGeometry = new THREE.BoxGeometry(0.15 * scale, 0.02 * scale, 1.5 * scale);
+        const leaf = new THREE.Mesh(leafGeometry, frondMaterial);
+        leaf.position.y = 1.5 * scale;
+        leaf.position.z = 0.3 * scale;
+        leaf.rotation.x = 0.3;
+        frondGroup.add(leaf);
+
+        frondGroup.position.y = 3.3 * scale;
+        frondGroup.rotation.y = angle;
+        frondGroup.rotation.x = 0.2;
+        treeGroup.add(frondGroup);
+    }
+
+    treeGroup.position.set(x, 0, z);
+    return treeGroup;
+}
+
+// Create random tree type
+function createTree(x, z) {
+    const treeType = Math.random();
+    if (treeType < 0.35) {
+        return createPineTree(x, z);
+    } else if (treeType < 0.6) {
+        return createOakTree(x, z);
+    } else if (treeType < 0.85) {
+        return createBirchTree(x, z);
+    } else {
+        return createPalmTree(x, z);
+    }
 }
 
 // Create bushes
