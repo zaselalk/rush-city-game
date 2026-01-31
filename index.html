@@ -21,6 +21,14 @@
         <div class="hud-label">🚦 RED LIGHTS</div>
         <div class="hud-value" id="redLightsRan">0</div>
       </div>
+      <div class="hud-item vehicle-counter">
+        <div class="hud-label">🚗 OVERTAKEN</div>
+        <div class="hud-value" id="vehiclesOvertaken">0</div>
+      </div>
+      <div class="hud-item nearmiss-counter">
+        <div class="hud-label">💨 NEAR MISS</div>
+        <div class="hud-value" id="nearMisses">0</div>
+      </div>
       <div class="hud-item">
         <div class="hud-label">DISTANCE</div>
         <div class="hud-value" id="distance">0</div>
@@ -62,14 +70,17 @@
 
     <div id="startScreen">
       <h1>NEON RUSH</h1>
-      <div class="subtitle">High-Speed 3D Racing</div>
+      <div class="subtitle">Dual Carriageway Challenge</div>
       <button class="btn" onclick="startGame()"><span>START RACE</span></button>
       <div class="controls">
         <strong>← →</strong> Steer Left/Right<br>
         <strong>↑</strong> Accelerate<br>
         <strong>↓</strong> Brake<br>
         <strong style="color: #ff6b6b;">⚠️ Watch out for pedestrians!</strong><br>
-        <strong style="color: #ffaa00;">🚦 Stop at red lights!</strong>
+        <strong style="color: #ffaa00;">🚦 Stop at red lights!</strong><br>
+        <strong style="color: #2ecc71;">🚗 Overtake traffic for bonus points!</strong><br>
+        <strong style="color: #e91e63;">💨 Near miss oncoming traffic: +25 pts!</strong><br>
+        <strong style="color: #00ffff;">🔀 Slow down at junctions to turn left/right!</strong>
       </div>
     </div>
 

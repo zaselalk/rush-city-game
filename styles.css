@@ -355,3 +355,39 @@ h1 {
 .traffic-counter:hover {
   box-shadow: 0 0 30px rgba(255, 170, 0, 0.8);
 }
+
+/* Vehicle overtaken counter styles */
+.vehicle-counter {
+  border-color: #2ecc71;
+  box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
+}
+
+.vehicle-counter .hud-label {
+  color: #2ecc71;
+}
+
+.vehicle-counter .hud-value {
+  text-shadow: 0 0 10px #2ecc71;
+}
+
+.vehicle-counter:hover {
+  box-shadow: 0 0 30px rgba(46, 204, 113, 0.8);
+}
+
+/* Near miss counter styles */
+.nearmiss-counter {
+  border-color: #e91e63;
+  box-shadow: 0 0 20px rgba(233, 30, 99, 0.5);
+}
+
+.nearmiss-counter .hud-label {
+  color: #e91e63;
+}
+
+.nearmiss-counter .hud-value {
+  text-shadow: 0 0 10px #e91e63;
+}
+
+.nearmiss-counter:hover {
+  box-shadow: 0 0 30px rgba(233, 30, 99, 0.8);
+}

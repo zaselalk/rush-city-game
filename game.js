@@ -38,6 +38,28 @@ let ranRedLights = 0; // Penalty counter
 let crossroads = [];
 let lastCrossroadZ = -100;
 
+// Autonomous vehicles system
+let autonomousVehicles = [];
+let lastVehicleZ = -30;
+let lastOncomingVehicleZ = -50;
+const VEHICLE_SPAWN_INTERVAL = 15; // Distance between vehicle spawns
+const ONCOMING_SPAWN_INTERVAL = 20; // Distance between oncoming vehicles
+let vehiclesOvertaken = 0;
+let nearMisses = 0; // Close calls with oncoming traffic
+
+// Alternative road system
+let alternativeRoadSegments = [];
+let currentRoadChoice = 'main'; // 'main', 'left', 'right'
+const ALT_ROAD_OFFSET = 12; // Distance from main road to alternative roads
+
+// Junction turning system
+let activeJunction = null;
+let turningState = 'none'; // 'none', 'turning_left', 'turning_right'
+let turnProgress = 0;
+let turnTargetAngle = 0;
+let postTurnDirection = 0; // Accumulated direction after turns
+let sideRoads = []; // Side roads extending from junctions
+
 // Audio state
 let audioContext;
 let masterGain;
@@ -855,8 +877,140 @@ function createCrossroad(z) {
 
     crossroadGroup.userData.isCrossroad = true;
     crossroadGroup.userData.worldZ = z;
+    crossroadGroup.userData.curveX = curveX;
+    crossroadGroup.userData.canTurnLeft = true;
+    crossroadGroup.userData.canTurnRight = true;
+
+    // Add side roads extending from the junction
+    createSideRoads(crossroadGroup, curveX, z);
 
     return crossroadGroup;
+}
+
+// Create side roads extending from junction
+function createSideRoads(crossroadGroup, curveX, z) {
+    const sideRoadLength = 50;
+    const sideRoadWidth = 6;
+
+    const roadMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a2a35,
+        roughness: 0.85,
+        metalness: 0.05
+    });
+
+    const shoulderMaterial = new THREE.MeshStandardMaterial({
+        color: 0x5a4a3a,
+        roughness: 0.95
+    });
+
+    const lineMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.5
+    });
+
+    // Left side road
+    const leftRoadGroup = new THREE.Group();
+
+    // Left road shoulder
+    const leftShoulder = new THREE.Mesh(
+        new THREE.PlaneGeometry(sideRoadLength, sideRoadWidth + 2),
+        shoulderMaterial
+    );
+    leftShoulder.rotation.x = -Math.PI / 2;
+    leftShoulder.rotation.z = Math.PI / 2;
+    leftShoulder.position.set(-sideRoadLength / 2 - 8, -0.02, 0);
+    leftRoadGroup.add(leftShoulder);
+
+    // Left road surface
+    const leftRoad = new THREE.Mesh(
+        new THREE.PlaneGeometry(sideRoadLength, sideRoadWidth),
+        roadMaterial
+    );
+    leftRoad.rotation.x = -Math.PI / 2;
+    leftRoad.rotation.z = Math.PI / 2;
+    leftRoad.position.set(-sideRoadLength / 2 - 8, 0, 0);
+    leftRoad.receiveShadow = true;
+    leftRoadGroup.add(leftRoad);
+
+    // Left road center line
+    for (let i = 0; i < 10; i++) {
+        const dashLine = new THREE.Mesh(
+            new THREE.BoxGeometry(3, 0.02, 0.15),
+            lineMaterial
+        );
+        dashLine.position.set(-12 - i * 5, 0.01, 0);
+        leftRoadGroup.add(dashLine);
+    }
+
+    // Left road edge lines
+    const leftEdge1 = new THREE.Mesh(
+        new THREE.BoxGeometry(sideRoadLength, 0.02, 0.1),
+        lineMaterial
+    );
+    leftEdge1.position.set(-sideRoadLength / 2 - 8, 0.01, -2.8);
+    leftRoadGroup.add(leftEdge1);
+
+    const leftEdge2 = new THREE.Mesh(
+        new THREE.BoxGeometry(sideRoadLength, 0.02, 0.1),
+        lineMaterial
+    );
+    leftEdge2.position.set(-sideRoadLength / 2 - 8, 0.01, 2.8);
+    leftRoadGroup.add(leftEdge2);
+
+    leftRoadGroup.position.set(curveX, 0, z);
+    crossroadGroup.add(leftRoadGroup);
+
+    // Right side road
+    const rightRoadGroup = new THREE.Group();
+
+    // Right road shoulder
+    const rightShoulder = new THREE.Mesh(
+        new THREE.PlaneGeometry(sideRoadLength, sideRoadWidth + 2),
+        shoulderMaterial
+    );
+    rightShoulder.rotation.x = -Math.PI / 2;
+    rightShoulder.rotation.z = Math.PI / 2;
+    rightShoulder.position.set(sideRoadLength / 2 + 8, -0.02, 0);
+    rightRoadGroup.add(rightShoulder);
+
+    // Right road surface
+    const rightRoad = new THREE.Mesh(
+        new THREE.PlaneGeometry(sideRoadLength, sideRoadWidth),
+        roadMaterial
+    );
+    rightRoad.rotation.x = -Math.PI / 2;
+    rightRoad.rotation.z = Math.PI / 2;
+    rightRoad.position.set(sideRoadLength / 2 + 8, 0, 0);
+    rightRoad.receiveShadow = true;
+    rightRoadGroup.add(rightRoad);
+
+    // Right road center line
+    for (let i = 0; i < 10; i++) {
+        const dashLine = new THREE.Mesh(
+            new THREE.BoxGeometry(3, 0.02, 0.15),
+            lineMaterial
+        );
+        dashLine.position.set(12 + i * 5, 0.01, 0);
+        rightRoadGroup.add(dashLine);
+    }
+
+    // Right road edge lines
+    const rightEdge1 = new THREE.Mesh(
+        new THREE.BoxGeometry(sideRoadLength, 0.02, 0.1),
+        lineMaterial
+    );
+    rightEdge1.position.set(sideRoadLength / 2 + 8, 0.01, -2.8);
+    rightRoadGroup.add(rightEdge1);
+
+    const rightEdge2 = new THREE.Mesh(
+        new THREE.BoxGeometry(sideRoadLength, 0.02, 0.1),
+        lineMaterial
+    );
+    rightEdge2.position.set(sideRoadLength / 2 + 8, 0.01, 2.8);
+    rightRoadGroup.add(rightEdge2);
+
+    rightRoadGroup.position.set(curveX, 0, z);
+    crossroadGroup.add(rightRoadGroup);
 }
 
 // Spawn crossroad with traffic lights
@@ -1552,6 +1706,942 @@ function playPedestrianHitSound() {
     osc.stop(audioContext.currentTime + 0.3);
 }
 
+// ========== AUTONOMOUS VEHICLES ==========
+
+// Create a sedan/car
+function createAutoCar(x, z, lane) {
+    const carGroup = new THREE.Group();
+
+    // Random car colors
+    const carColors = [0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c, 0x34495e, 0xc0392b];
+    const bodyColor = carColors[Math.floor(Math.random() * carColors.length)];
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: bodyColor,
+        metalness: 0.7,
+        roughness: 0.3
+    });
+
+    const darkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a,
+        metalness: 0.3,
+        roughness: 0.5
+    });
+
+    // Lower body
+    const lowerBody = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3, 0.3, 2.2),
+        bodyMaterial
+    );
+    lowerBody.position.y = 0.25;
+    lowerBody.castShadow = true;
+    carGroup.add(lowerBody);
+
+    // Upper body/cabin
+    const cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 0.35, 1.2),
+        bodyMaterial
+    );
+    cabin.position.set(0, 0.55, -0.2);
+    cabin.castShadow = true;
+    carGroup.add(cabin);
+
+    // Windows
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a2030,
+        metalness: 0.9,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 0.3, 0.05),
+        glassMaterial
+    );
+    windshield.position.set(0, 0.55, 0.35);
+    windshield.rotation.x = -0.3;
+    carGroup.add(windshield);
+
+    // Wheels
+    const wheelGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.15, 16);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+    [[-0.55, 0.2, 0.65], [0.55, 0.2, 0.65], [-0.55, 0.2, -0.7], [0.55, 0.2, -0.7]].forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(...pos);
+        wheel.userData.isWheel = true;
+        carGroup.add(wheel);
+    });
+
+    // Headlights
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffee,
+        emissive: 0xffffaa,
+        emissiveIntensity: 0.5
+    });
+
+    [[-0.4, 0.3, 1.1], [0.4, 0.3, 1.1]].forEach(pos => {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.05), lightMaterial);
+        light.position.set(...pos);
+        carGroup.add(light);
+    });
+
+    // Tail lights
+    const tailMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.5
+    });
+
+    [[-0.45, 0.3, -1.1], [0.45, 0.3, -1.1]].forEach(pos => {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), tailMaterial);
+        light.position.set(...pos);
+        carGroup.add(light);
+    });
+
+    setupVehicle(carGroup, x, z, lane, 'car', 0.6 + Math.random() * 0.3);
+    return carGroup;
+}
+
+// Create a motorcycle/bike
+function createMotorcycle(x, z, lane) {
+    const bikeGroup = new THREE.Group();
+
+    const frameMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2c3e50,
+        metalness: 0.8,
+        roughness: 0.2
+    });
+
+    const chromeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        metalness: 0.95,
+        roughness: 0.1
+    });
+
+    // Main frame
+    const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.3, 1.2),
+        frameMaterial
+    );
+    frame.position.y = 0.5;
+    frame.rotation.x = 0.1;
+    bikeGroup.add(frame);
+
+    // Fuel tank
+    const tankColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1a1a1a];
+    const tankMaterial = new THREE.MeshStandardMaterial({
+        color: tankColors[Math.floor(Math.random() * tankColors.length)],
+        metalness: 0.7,
+        roughness: 0.3
+    });
+
+    const tank = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.2, 0.4),
+        tankMaterial
+    );
+    tank.position.set(0, 0.65, 0.1);
+    bikeGroup.add(tank);
+
+    // Seat
+    const seat = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.1, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 })
+    );
+    seat.position.set(0, 0.6, -0.3);
+    bikeGroup.add(seat);
+
+    // Wheels
+    const wheelGeometry = new THREE.TorusGeometry(0.28, 0.08, 8, 24);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+    const frontWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    frontWheel.rotation.y = Math.PI / 2;
+    frontWheel.position.set(0, 0.28, 0.6);
+    frontWheel.userData.isWheel = true;
+    bikeGroup.add(frontWheel);
+
+    const rearWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    rearWheel.rotation.y = Math.PI / 2;
+    rearWheel.position.set(0, 0.28, -0.5);
+    rearWheel.userData.isWheel = true;
+    bikeGroup.add(rearWheel);
+
+    // Handlebars
+    const handlebar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.02, 0.5, 8),
+        chromeMaterial
+    );
+    handlebar.rotation.z = Math.PI / 2;
+    handlebar.position.set(0, 0.8, 0.5);
+    bikeGroup.add(handlebar);
+
+    // Headlight
+    const headlight = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffaa, emissiveIntensity: 0.8 })
+    );
+    headlight.position.set(0, 0.7, 0.7);
+    bikeGroup.add(headlight);
+
+    // Rider
+    const riderGroup = createSimpleRider();
+    riderGroup.position.set(0, 0.7, -0.15);
+    bikeGroup.add(riderGroup);
+
+    setupVehicle(bikeGroup, x, z, lane, 'motorcycle', 0.8 + Math.random() * 0.4);
+    return bikeGroup;
+}
+
+// Create simple rider figure for motorcycle
+function createSimpleRider() {
+    const riderGroup = new THREE.Group();
+
+    const helmetMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3 });
+    const jacketMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.7 });
+
+    // Helmet
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), helmetMaterial);
+    helmet.position.y = 0.55;
+    helmet.scale.set(1, 1.1, 1.2);
+    riderGroup.add(helmet);
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.35, 0.15), jacketMaterial);
+    torso.position.y = 0.25;
+    torso.rotation.x = 0.3;
+    riderGroup.add(torso);
+
+    return riderGroup;
+}
+
+// Create a bus
+function createBus(x, z, lane) {
+    const busGroup = new THREE.Group();
+
+    const busColors = [0x2980b9, 0xc0392b, 0x27ae60, 0xf39c12, 0x8e44ad];
+    const busColor = busColors[Math.floor(Math.random() * busColors.length)];
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: busColor,
+        metalness: 0.3,
+        roughness: 0.6
+    });
+
+    // Main body
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(2.0, 1.8, 5.5),
+        bodyMaterial
+    );
+    body.position.y = 1.1;
+    body.castShadow = true;
+    busGroup.add(body);
+
+    // Windows strip
+    const windowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a3a4a,
+        metalness: 0.8,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    // Side windows
+    [-1.01, 1.01].forEach(xPos => {
+        const windows = new THREE.Mesh(
+            new THREE.BoxGeometry(0.02, 0.8, 4.5),
+            windowMaterial
+        );
+        windows.position.set(xPos, 1.4, -0.2);
+        busGroup.add(windows);
+    });
+
+    // Front windshield
+    const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 1.0, 0.05),
+        windowMaterial
+    );
+    windshield.position.set(0, 1.3, 2.73);
+    busGroup.add(windshield);
+
+    // Wheels (6 wheels - front 2, rear 4)
+    const wheelGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+    [[-0.85, 0.35, 2.0], [0.85, 0.35, 2.0],
+    [-0.85, 0.35, -1.5], [0.85, 0.35, -1.5],
+    [-0.85, 0.35, -2.2], [0.85, 0.35, -2.2]].forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(...pos);
+        wheel.userData.isWheel = true;
+        busGroup.add(wheel);
+    });
+
+    // Headlights
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffee,
+        emissive: 0xffffaa,
+        emissiveIntensity: 0.5
+    });
+
+    [[-0.7, 0.6, 2.76], [0.7, 0.6, 2.76]].forEach(pos => {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.05), lightMaterial);
+        light.position.set(...pos);
+        busGroup.add(light);
+    });
+
+    // Destination sign
+    const signMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.3
+    });
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.25, 0.05), signMaterial);
+    sign.position.set(0, 1.85, 2.73);
+    busGroup.add(sign);
+
+    setupVehicle(busGroup, x, z, lane, 'bus', 0.4 + Math.random() * 0.2);
+    return busGroup;
+}
+
+// Create a tractor
+function createTractor(x, z, lane) {
+    const tractorGroup = new THREE.Group();
+
+    const tractorColors = [0x27ae60, 0xe74c3c, 0xf39c12, 0x3498db];
+    const tractorColor = tractorColors[Math.floor(Math.random() * tractorColors.length)];
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: tractorColor,
+        metalness: 0.4,
+        roughness: 0.6
+    });
+
+    // Engine hood
+    const hood = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9, 0.6, 1.2),
+        bodyMaterial
+    );
+    hood.position.set(0, 0.8, 0.8);
+    hood.castShadow = true;
+    tractorGroup.add(hood);
+
+    // Cabin
+    const cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 1.0, 1.0),
+        bodyMaterial
+    );
+    cabin.position.set(0, 1.2, -0.2);
+    cabin.castShadow = true;
+    tractorGroup.add(cabin);
+
+    // Cabin windows
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0x87ceeb,
+        metalness: 0.6,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.6
+    });
+
+    // Front window
+    const frontWindow = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.6, 0.05),
+        glassMaterial
+    );
+    frontWindow.position.set(0, 1.35, 0.28);
+    tractorGroup.add(frontWindow);
+
+    // Roof
+    const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 0.08, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 })
+    );
+    roof.position.set(0, 1.75, -0.2);
+    tractorGroup.add(roof);
+
+    // Large rear wheels
+    const rearWheelGeometry = new THREE.CylinderGeometry(0.55, 0.55, 0.35, 24);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+
+    const leftRear = new THREE.Mesh(rearWheelGeometry, wheelMaterial);
+    leftRear.rotation.z = Math.PI / 2;
+    leftRear.position.set(-0.65, 0.55, -0.5);
+    leftRear.userData.isWheel = true;
+    tractorGroup.add(leftRear);
+
+    const rightRear = new THREE.Mesh(rearWheelGeometry, wheelMaterial);
+    rightRear.rotation.z = Math.PI / 2;
+    rightRear.position.set(0.65, 0.55, -0.5);
+    rightRear.userData.isWheel = true;
+    tractorGroup.add(rightRear);
+
+    // Smaller front wheels
+    const frontWheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+
+    const leftFront = new THREE.Mesh(frontWheelGeometry, wheelMaterial);
+    leftFront.rotation.z = Math.PI / 2;
+    leftFront.position.set(-0.45, 0.3, 1.0);
+    leftFront.userData.isWheel = true;
+    tractorGroup.add(leftFront);
+
+    const rightFront = new THREE.Mesh(frontWheelGeometry, wheelMaterial);
+    rightFront.rotation.z = Math.PI / 2;
+    rightFront.position.set(0.45, 0.3, 1.0);
+    rightFront.userData.isWheel = true;
+    tractorGroup.add(rightFront);
+
+    // Exhaust pipe
+    const exhaust = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.06, 0.6, 8),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.3 })
+    );
+    exhaust.position.set(0.35, 1.4, 0.6);
+    tractorGroup.add(exhaust);
+
+    setupVehicle(tractorGroup, x, z, lane, 'tractor', 0.25 + Math.random() * 0.15);
+    return tractorGroup;
+}
+
+// Create a truck
+function createTruck(x, z, lane) {
+    const truckGroup = new THREE.Group();
+
+    const cabColors = [0x2980b9, 0xc0392b, 0xf39c12, 0x1a1a1a, 0x2c3e50];
+    const cabColor = cabColors[Math.floor(Math.random() * cabColors.length)];
+
+    const cabMaterial = new THREE.MeshStandardMaterial({
+        color: cabColor,
+        metalness: 0.5,
+        roughness: 0.5
+    });
+
+    // Cab
+    const cab = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 1.4, 1.5),
+        cabMaterial
+    );
+    cab.position.set(0, 1.0, 1.5);
+    cab.castShadow = true;
+    truckGroup.add(cab);
+
+    // Trailer/cargo
+    const trailerMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        metalness: 0.3,
+        roughness: 0.7
+    });
+
+    const trailer = new THREE.Mesh(
+        new THREE.BoxGeometry(1.9, 1.6, 4.0),
+        trailerMaterial
+    );
+    trailer.position.set(0, 1.1, -1.0);
+    trailer.castShadow = true;
+    truckGroup.add(trailer);
+
+    // Windshield
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a3a4a,
+        metalness: 0.8,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.8, 0.05),
+        glassMaterial
+    );
+    windshield.position.set(0, 1.2, 2.23);
+    truckGroup.add(windshield);
+
+    // Wheels
+    const wheelGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+    [[-0.8, 0.35, 1.8], [0.8, 0.35, 1.8],
+    [-0.8, 0.35, -1.5], [0.8, 0.35, -1.5],
+    [-0.8, 0.35, -2.5], [0.8, 0.35, -2.5]].forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(...pos);
+        wheel.userData.isWheel = true;
+        truckGroup.add(wheel);
+    });
+
+    // Headlights
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffee,
+        emissive: 0xffffaa,
+        emissiveIntensity: 0.5
+    });
+
+    [[-0.65, 0.6, 2.26], [0.65, 0.6, 2.26]].forEach(pos => {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.05), lightMaterial);
+        light.position.set(...pos);
+        truckGroup.add(light);
+    });
+
+    setupVehicle(truckGroup, x, z, lane, 'truck', 0.45 + Math.random() * 0.2);
+    return truckGroup;
+}
+
+// Create a van
+function createVan(x, z, lane) {
+    const vanGroup = new THREE.Group();
+
+    const vanColors = [0xffffff, 0x3498db, 0xf39c12, 0x95a5a6, 0x2ecc71];
+    const vanColor = vanColors[Math.floor(Math.random() * vanColors.length)];
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: vanColor,
+        metalness: 0.4,
+        roughness: 0.5
+    });
+
+    // Main body
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 1.4, 3.2),
+        bodyMaterial
+    );
+    body.position.y = 0.9;
+    body.castShadow = true;
+    vanGroup.add(body);
+
+    // Windshield
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a3a4a,
+        metalness: 0.8,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.7, 0.05),
+        glassMaterial
+    );
+    windshield.position.set(0, 1.1, 1.58);
+    windshield.rotation.x = -0.15;
+    vanGroup.add(windshield);
+
+    // Wheels
+    const wheelGeometry = new THREE.CylinderGeometry(0.28, 0.28, 0.2, 16);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+    [[-0.7, 0.28, 1.0], [0.7, 0.28, 1.0], [-0.7, 0.28, -1.0], [0.7, 0.28, -1.0]].forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(...pos);
+        wheel.userData.isWheel = true;
+        vanGroup.add(wheel);
+    });
+
+    // Headlights
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffee,
+        emissive: 0xffffaa,
+        emissiveIntensity: 0.5
+    });
+
+    [[-0.55, 0.55, 1.61], [0.55, 0.55, 1.61]].forEach(pos => {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.05), lightMaterial);
+        light.position.set(...pos);
+        vanGroup.add(light);
+    });
+
+    setupVehicle(vanGroup, x, z, lane, 'van', 0.5 + Math.random() * 0.25);
+    return vanGroup;
+}
+
+// Create a sports car
+function createSportsCar(x, z, lane) {
+    const carGroup = new THREE.Group();
+
+    const sportsColors = [0xff0000, 0xffff00, 0xff6600, 0x00ff00, 0x0066ff];
+    const bodyColor = sportsColors[Math.floor(Math.random() * sportsColors.length)];
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: bodyColor,
+        metalness: 0.85,
+        roughness: 0.15
+    });
+
+    // Low sleek body
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.25, 2.8),
+        bodyMaterial
+    );
+    body.position.y = 0.22;
+    body.castShadow = true;
+    carGroup.add(body);
+
+    // Sloped front
+    const front = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.15, 0.8),
+        bodyMaterial
+    );
+    front.position.set(0, 0.28, 1.1);
+    front.rotation.x = -0.2;
+    carGroup.add(front);
+
+    // Cockpit
+    const cockpit = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 0.25, 0.9),
+        bodyMaterial
+    );
+    cockpit.position.set(0, 0.42, -0.3);
+    carGroup.add(cockpit);
+
+    // Windshield
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a2030,
+        metalness: 0.9,
+        roughness: 0.05,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    const windshield = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 0.25, 0.05),
+        glassMaterial
+    );
+    windshield.position.set(0, 0.45, 0.12);
+    windshield.rotation.x = -0.6;
+    carGroup.add(windshield);
+
+    // Wheels - low profile
+    const wheelGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.18, 20);
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
+
+    [[-0.65, 0.2, 0.85], [0.65, 0.2, 0.85], [-0.65, 0.2, -0.9], [0.65, 0.2, -0.9]].forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(...pos);
+        wheel.userData.isWheel = true;
+        carGroup.add(wheel);
+    });
+
+    // Rear spoiler
+    const spoiler = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3, 0.05, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 })
+    );
+    spoiler.position.set(0, 0.5, -1.3);
+    carGroup.add(spoiler);
+
+    const spoilerStands = new THREE.Mesh(
+        new THREE.BoxGeometry(0.05, 0.15, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+    );
+    [[-0.5, 0.42, -1.3], [0.5, 0.42, -1.3]].forEach(pos => {
+        const stand = spoilerStands.clone();
+        stand.position.set(...pos);
+        carGroup.add(stand);
+    });
+
+    setupVehicle(carGroup, x, z, lane, 'sportscar', 0.9 + Math.random() * 0.4);
+    return carGroup;
+}
+
+// Setup common vehicle properties
+function setupVehicle(vehicle, x, z, lane, type, baseVehicleSpeed, isOncoming = false) {
+    vehicle.position.set(x, 0, z);
+    vehicle.rotation.y = isOncoming ? 0 : Math.PI; // Face opposite direction if oncoming
+    vehicle.userData.isVehicle = true;
+    vehicle.userData.vehicleType = type;
+    vehicle.userData.lane = lane;
+    vehicle.userData.speed = baseVehicleSpeed;
+    vehicle.userData.passed = false;
+    vehicle.userData.hit = false;
+    vehicle.userData.isOncoming = isOncoming;
+    vehicle.userData.nearMissTriggered = false;
+    vehicle.castShadow = true;
+}
+
+// Spawn a random vehicle (same direction - player's lanes)
+function spawnVehicle(z) {
+    const curveX = getRoadCurveAt(z);
+    // Player's side lanes (right side of road): 1.5 to 5.5
+    const lane = Math.random() > 0.5 ? 2.0 : 5.0; // Inner or outer lane on right side
+    const x = curveX + lane;
+
+    const vehicleTypes = [
+        { create: createAutoCar, weight: 30 },
+        { create: createMotorcycle, weight: 15 },
+        { create: createBus, weight: 10 },
+        { create: createTractor, weight: 8 },
+        { create: createTruck, weight: 15 },
+        { create: createVan, weight: 12 },
+        { create: createSportsCar, weight: 10 }
+    ];
+
+    // Weighted random selection
+    const totalWeight = vehicleTypes.reduce((sum, v) => sum + v.weight, 0);
+    let random = Math.random() * totalWeight;
+    let selected = vehicleTypes[0];
+
+    for (const vType of vehicleTypes) {
+        random -= vType.weight;
+        if (random <= 0) {
+            selected = vType;
+            break;
+        }
+    }
+
+    const vehicle = selected.create(x, z, lane);
+    autonomousVehicles.push(vehicle);
+    scene.add(vehicle);
+}
+
+// Spawn oncoming traffic (opposite direction - left lanes)
+function spawnOncomingVehicle(z) {
+    const curveX = getRoadCurveAt(z);
+    // Oncoming lanes (left side of road): -5.5 to -1.5
+    const lane = Math.random() > 0.5 ? -2.0 : -5.0; // Inner or outer lane on left side
+    const x = curveX + lane;
+
+    // Oncoming vehicles - mostly cars and trucks, no tractors
+    const vehicleTypes = [
+        { create: createAutoCar, weight: 35 },
+        { create: createMotorcycle, weight: 15 },
+        { create: createBus, weight: 12 },
+        { create: createTruck, weight: 18 },
+        { create: createVan, weight: 12 },
+        { create: createSportsCar, weight: 8 }
+    ];
+
+    const totalWeight = vehicleTypes.reduce((sum, v) => sum + v.weight, 0);
+    let random = Math.random() * totalWeight;
+    let selected = vehicleTypes[0];
+
+    for (const vType of vehicleTypes) {
+        random -= vType.weight;
+        if (random <= 0) {
+            selected = vType;
+            break;
+        }
+    }
+
+    // Create vehicle with oncoming flag
+    const vehicle = selected.create(x, z, lane);
+    // Override to make it oncoming
+    vehicle.rotation.y = 0; // Face towards player
+    vehicle.userData.isOncoming = true;
+    vehicle.userData.nearMissTriggered = false;
+    // Oncoming vehicles are faster relative to player
+    vehicle.userData.speed = vehicle.userData.speed * 1.5 + 0.3;
+
+    autonomousVehicles.push(vehicle);
+    scene.add(vehicle);
+}
+
+// Update autonomous vehicles
+function updateAutonomousVehicles() {
+    if (!playerCar) return;
+
+    // Spawn new vehicles ahead (same direction)
+    if (playerCar.position.z < lastVehicleZ - VEHICLE_SPAWN_INTERVAL) {
+        if (Math.random() > 0.3) { // 70% chance to spawn
+            spawnVehicle(lastVehicleZ - 60 - Math.random() * 30);
+        }
+        lastVehicleZ -= VEHICLE_SPAWN_INTERVAL;
+    }
+
+    // Spawn oncoming traffic
+    if (playerCar.position.z < lastOncomingVehicleZ - ONCOMING_SPAWN_INTERVAL) {
+        if (Math.random() > 0.25) { // 75% chance to spawn oncoming
+            spawnOncomingVehicle(lastOncomingVehicleZ - 80 - Math.random() * 40);
+        }
+        lastOncomingVehicleZ -= ONCOMING_SPAWN_INTERVAL;
+    }
+
+    // Update each vehicle
+    autonomousVehicles.forEach(vehicle => {
+        if (vehicle.userData.hit) return;
+
+        const vehicleSpeed = vehicle.userData.speed * 0.5;
+
+        if (vehicle.userData.isOncoming) {
+            // Oncoming traffic moves towards player
+            vehicle.position.z += vehicleSpeed;
+
+            // Animate wheels in opposite direction
+            vehicle.children.forEach(child => {
+                if (child.userData.isWheel) {
+                    child.rotation.x += vehicleSpeed * 0.3;
+                }
+            });
+
+            // Rotate to follow road (opposite direction)
+            const roadDir = getRoadDirectionAt(vehicle.position.z);
+            vehicle.rotation.y = roadDir; // Facing player
+
+            // Check for near miss (close call)
+            if (!vehicle.userData.nearMissTriggered) {
+                const xDist = Math.abs(vehicle.position.x - playerCar.position.x);
+                const zDist = Math.abs(vehicle.position.z - playerCar.position.z);
+                if (zDist < 5 && xDist < 2.5 && xDist > 1.5) {
+                    vehicle.userData.nearMissTriggered = true;
+                    nearMisses++;
+                    score += 25; // Bonus for near miss
+                    playNearMissSound();
+                }
+            }
+        } else {
+            // Same direction traffic moves away from player (slower)
+            vehicle.position.z -= vehicleSpeed;
+
+            // Animate wheels
+            vehicle.children.forEach(child => {
+                if (child.userData.isWheel) {
+                    child.rotation.x -= vehicleSpeed * 0.3;
+                }
+            });
+
+            // Rotate to follow road
+            const roadDir = getRoadDirectionAt(vehicle.position.z);
+            vehicle.rotation.y = Math.PI + roadDir;
+
+            // Check if player passed this vehicle
+            if (!vehicle.userData.passed && playerCar.position.z < vehicle.position.z - 3) {
+                vehicle.userData.passed = true;
+                vehiclesOvertaken++;
+                score += 10; // Bonus for overtaking
+            }
+        }
+
+        // Keep vehicle on the curved road
+        const curveX = getRoadCurveAt(vehicle.position.z);
+        const targetX = curveX + vehicle.userData.lane;
+        vehicle.position.x += (targetX - vehicle.position.x) * 0.1;
+    });
+
+    // Remove vehicles that are too far behind or ahead
+    autonomousVehicles = autonomousVehicles.filter(vehicle => {
+        const tooFarBehind = vehicle.position.z > playerCar.position.z + 50;
+        const tooFarAhead = vehicle.position.z < playerCar.position.z - 150;
+        if (tooFarBehind || tooFarAhead) {
+            scene.remove(vehicle);
+            return false;
+        }
+        return true;
+    });
+
+    // Check collisions with vehicles
+    checkVehicleCollision();
+}
+
+// Play near miss sound
+function playNearMissSound() {
+    if (!audioInitialized || !audioContext) return;
+
+    // Whoosh sound for near miss
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 800;
+    osc.frequency.linearRampToValueAtTime(200, audioContext.currentTime + 0.3);
+
+    gain.gain.value = 0.15;
+    gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.4);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.4);
+}
+
+// Check collision with other vehicles
+function checkVehicleCollision() {
+    if (!playerCar || !gameActive) return;
+
+    const carBox = new THREE.Box3().setFromObject(playerCar);
+    // Shrink hitbox slightly for more forgiving collisions
+    carBox.min.x += 0.2;
+    carBox.max.x -= 0.2;
+    carBox.min.z += 0.3;
+    carBox.max.z -= 0.3;
+
+    autonomousVehicles.forEach(vehicle => {
+        if (vehicle.userData.hit) return;
+
+        const vehicleBox = new THREE.Box3().setFromObject(vehicle);
+
+        if (carBox.intersectsBox(vehicleBox)) {
+            // Collision!
+            vehicle.userData.hit = true;
+
+            // Oncoming collision is more severe
+            const isOncoming = vehicle.userData.isOncoming;
+
+            // Play crash sound
+            playVehicleCrashSound();
+
+            // Slow down - more severe for oncoming collision
+            if (isOncoming) {
+                speed = 0; // Full stop for head-on collision
+                score = Math.max(0, score - 150); // Double penalty
+                flashScreen('rgba(255, 0, 0, 0.7)');
+            } else {
+                speed = Math.max(speed * 0.3, 0);
+                score = Math.max(0, score - 75);
+                flashScreen('rgba(255, 50, 0, 0.5)');
+            }
+        }
+    });
+}
+
+// Play vehicle crash sound
+function playVehicleCrashSound() {
+    if (!audioInitialized || !audioContext) return;
+
+    // Metallic crash
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.value = 150;
+    osc.frequency.linearRampToValueAtTime(50, audioContext.currentTime + 0.3);
+
+    gain.gain.value = 0.4;
+    gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.4);
+
+    const filter = audioContext.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.4);
+
+    // Add noise burst
+    const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.3, audioContext.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseData.length);
+    }
+
+    const noiseSource = audioContext.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const noiseGain = audioContext.createGain();
+    noiseGain.gain.value = 0.25;
+
+    noiseSource.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSource.start();
+}
+
 // Flash screen effect
 function flashScreen(color) {
     const flash = document.createElement('div');
@@ -1624,6 +2714,16 @@ function createNatureElements() {
     // Create initial crossroads with traffic lights
     spawnCrossroad(-50);
     spawnCrossroad(-130);
+
+    // Create initial autonomous vehicles (same direction)
+    for (let i = 0; i < 5; i++) {
+        spawnVehicle(-40 - i * 25);
+    }
+
+    // Create initial oncoming vehicles
+    for (let i = 0; i < 3; i++) {
+        spawnOncomingVehicle(-60 - i * 35);
+    }
 }
 
 // Generate environment objects at a specific Z position
@@ -1631,9 +2731,12 @@ function generateEnvironmentAtZ(z) {
     // Get road curve offset at this Z position
     const curveX = getRoadCurveAt(z);
 
+    // Road is now wider (guard rails at ±6.8), so place objects beyond that
+    const roadEdgeOffset = 8; // Minimum distance from road center
+
     // Left side trees (relative to curved road)
     if (Math.random() > 0.3) {
-        const tree = createTree(curveX - 5 - Math.random() * 3, z);
+        const tree = createTree(curveX - roadEdgeOffset - Math.random() * 4, z);
         tree.userData.isEnvironment = true;
         environmentObjects.push(tree);
         scene.add(tree);
@@ -1641,7 +2744,7 @@ function generateEnvironmentAtZ(z) {
 
     // Right side trees (relative to curved road)
     if (Math.random() > 0.3) {
-        const tree = createTree(curveX + 5 + Math.random() * 3, z);
+        const tree = createTree(curveX + roadEdgeOffset + Math.random() * 4, z);
         tree.userData.isEnvironment = true;
         environmentObjects.push(tree);
         scene.add(tree);
@@ -1649,14 +2752,14 @@ function generateEnvironmentAtZ(z) {
 
     // Bushes
     if (Math.random() > 0.5) {
-        const bush = createBush(curveX - 4 - Math.random() * 2, z + Math.random() * 2);
+        const bush = createBush(curveX - roadEdgeOffset - 0.5 - Math.random() * 2, z + Math.random() * 2);
         bush.userData.isEnvironment = true;
         environmentObjects.push(bush);
         scene.add(bush);
     }
 
     if (Math.random() > 0.5) {
-        const bush = createBush(curveX + 4 + Math.random() * 2, z + Math.random() * 2);
+        const bush = createBush(curveX + roadEdgeOffset + 0.5 + Math.random() * 2, z + Math.random() * 2);
         bush.userData.isEnvironment = true;
         environmentObjects.push(bush);
         scene.add(bush);
@@ -1664,14 +2767,14 @@ function generateEnvironmentAtZ(z) {
 
     // Rocks
     if (Math.random() > 0.7) {
-        const rock = createRock(curveX - 4.5 - Math.random() * 2, z + Math.random() * 2);
+        const rock = createRock(curveX - roadEdgeOffset - 1 - Math.random() * 2, z + Math.random() * 2);
         rock.userData.isEnvironment = true;
         environmentObjects.push(rock);
         scene.add(rock);
     }
 
     if (Math.random() > 0.7) {
-        const rock = createRock(curveX + 4.5 + Math.random() * 2, z + Math.random() * 2);
+        const rock = createRock(curveX + roadEdgeOffset + 1 + Math.random() * 2, z + Math.random() * 2);
         rock.userData.isEnvironment = true;
         environmentObjects.push(rock);
         scene.add(rock);
@@ -1679,14 +2782,14 @@ function generateEnvironmentAtZ(z) {
 
     // Buildings (less frequent, further from road)
     if (Math.random() > 0.85) {
-        const building = createBuilding(curveX - 10 - Math.random() * 8, z);
+        const building = createBuilding(curveX - roadEdgeOffset - 6 - Math.random() * 8, z);
         building.userData.isEnvironment = true;
         environmentObjects.push(building);
         scene.add(building);
     }
 
     if (Math.random() > 0.85) {
-        const building = createBuilding(curveX + 10 + Math.random() * 8, z);
+        const building = createBuilding(curveX + roadEdgeOffset + 6 + Math.random() * 8, z);
         building.userData.isEnvironment = true;
         environmentObjects.push(building);
         scene.add(building);
@@ -1741,8 +2844,8 @@ function createRoad() {
 function createRoadSegment(index, worldZ) {
     const segmentGroup = new THREE.Group();
 
-    // Road shoulder/dirt edge
-    const shoulderGeometry = new THREE.PlaneGeometry(9, ROAD_SEGMENT_LENGTH + 0.5);
+    // Road shoulder/dirt edge - wider for dual carriageway
+    const shoulderGeometry = new THREE.PlaneGeometry(16, ROAD_SEGMENT_LENGTH + 0.5);
     const shoulderMaterial = new THREE.MeshStandardMaterial({
         color: 0x5a4a3a,
         roughness: 0.95
@@ -1753,8 +2856,8 @@ function createRoadSegment(index, worldZ) {
     shoulder.receiveShadow = true;
     segmentGroup.add(shoulder);
 
-    // Main road asphalt
-    const roadGeometry = new THREE.PlaneGeometry(7, ROAD_SEGMENT_LENGTH + 0.5);
+    // Main road asphalt - player's side (right lanes)
+    const roadGeometry = new THREE.PlaneGeometry(6, ROAD_SEGMENT_LENGTH + 0.5);
     const roadMaterial = new THREE.MeshStandardMaterial({
         color: 0x2a2a35,
         roughness: 0.85,
@@ -1762,30 +2865,71 @@ function createRoadSegment(index, worldZ) {
     });
     const roadMesh = new THREE.Mesh(roadGeometry, roadMaterial);
     roadMesh.rotation.x = -Math.PI / 2;
-    roadMesh.position.y = 0;
+    roadMesh.position.set(3.5, 0, 0);
     roadMesh.receiveShadow = true;
     segmentGroup.add(roadMesh);
 
-    // Center dashed line
-    const lineGeometry = new THREE.BoxGeometry(0.15, 0.02, 3);
+    // Oncoming lane asphalt (left lanes)
+    const oncomingRoad = new THREE.Mesh(roadGeometry, roadMaterial);
+    oncomingRoad.rotation.x = -Math.PI / 2;
+    oncomingRoad.position.set(-3.5, 0, 0);
+    oncomingRoad.receiveShadow = true;
+    segmentGroup.add(oncomingRoad);
+
+    // Center median/divider
+    const medianGeometry = new THREE.BoxGeometry(0.8, 0.15, ROAD_SEGMENT_LENGTH + 0.5);
+    const medianMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a4a4a,
+        roughness: 0.9
+    });
+    const median = new THREE.Mesh(medianGeometry, medianMaterial);
+    median.position.set(0, 0.08, 0);
+    median.castShadow = true;
+    segmentGroup.add(median);
+
+    // Yellow center lines on median
+    const yellowLineMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffcc00,
+        roughness: 0.5
+    });
+    const yellowLineGeometry = new THREE.BoxGeometry(0.1, 0.02, ROAD_SEGMENT_LENGTH);
+
+    const leftYellow = new THREE.Mesh(yellowLineGeometry, yellowLineMaterial);
+    leftYellow.position.set(-0.45, 0.16, 0);
+    segmentGroup.add(leftYellow);
+
+    const rightYellow = new THREE.Mesh(yellowLineGeometry, yellowLineMaterial);
+    rightYellow.position.set(0.45, 0.16, 0);
+    segmentGroup.add(rightYellow);
+
     const lineMaterial = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.5
     });
-    const centerLine = new THREE.Mesh(lineGeometry, lineMaterial);
-    centerLine.position.y = 0.01;
-    segmentGroup.add(centerLine);
 
-    // Left edge line
+    // Lane divider on player's side (dashed)
+    const lineGeometry = new THREE.BoxGeometry(0.12, 0.02, 3);
+    const laneDivider = new THREE.Mesh(lineGeometry, lineMaterial);
+    laneDivider.position.set(3.5, 0.01, 0);
+    segmentGroup.add(laneDivider);
+
+    // Lane divider on oncoming side (dashed)
+    const oncomingDivider = new THREE.Mesh(lineGeometry, lineMaterial);
+    oncomingDivider.position.set(-3.5, 0.01, 0);
+    segmentGroup.add(oncomingDivider);
+
+    // Edge lines
     const edgeGeometry = new THREE.BoxGeometry(0.1, 0.02, ROAD_SEGMENT_LENGTH);
-    const leftEdge = new THREE.Mesh(edgeGeometry, lineMaterial);
-    leftEdge.position.set(-3.2, 0.01, 0);
-    segmentGroup.add(leftEdge);
 
-    // Right edge line
+    // Right edge (player's far right)
     const rightEdge = new THREE.Mesh(edgeGeometry, lineMaterial);
-    rightEdge.position.set(3.2, 0.01, 0);
+    rightEdge.position.set(6.3, 0.01, 0);
     segmentGroup.add(rightEdge);
+
+    // Left edge (oncoming far left)
+    const leftEdge = new THREE.Mesh(edgeGeometry, lineMaterial);
+    leftEdge.position.set(-6.3, 0.01, 0);
+    segmentGroup.add(leftEdge);
 
     // Guard rails
     const guardRailGeometry = new THREE.BoxGeometry(0.15, 0.4, ROAD_SEGMENT_LENGTH);
@@ -1795,15 +2939,15 @@ function createRoadSegment(index, worldZ) {
         roughness: 0.3
     });
 
-    const leftGuardRail = new THREE.Mesh(guardRailGeometry, guardRailMaterial);
-    leftGuardRail.position.set(-3.8, 0.2, 0);
-    leftGuardRail.castShadow = true;
-    segmentGroup.add(leftGuardRail);
-
     const rightGuardRail = new THREE.Mesh(guardRailGeometry, guardRailMaterial);
-    rightGuardRail.position.set(3.8, 0.2, 0);
+    rightGuardRail.position.set(6.8, 0.2, 0);
     rightGuardRail.castShadow = true;
     segmentGroup.add(rightGuardRail);
+
+    const leftGuardRail = new THREE.Mesh(guardRailGeometry, guardRailMaterial);
+    leftGuardRail.position.set(-6.8, 0.2, 0);
+    leftGuardRail.castShadow = true;
+    segmentGroup.add(leftGuardRail);
 
     // Set segment position with curve applied
     segmentGroup.position.z = worldZ;
@@ -2157,6 +3301,228 @@ function createPlayerCar() {
     scene.add(playerCar);
 }
 
+// Check if player is at a junction and can turn
+function updateJunctionTurning() {
+    if (!playerCar || turningState !== 'none') return;
+
+    const carZ = playerCar.position.z;
+    const carX = playerCar.position.x;
+
+    // Check each crossroad
+    for (const crossroad of crossroads) {
+        const junctionZ = crossroad.userData.worldZ;
+        const junctionX = crossroad.userData.curveX;
+
+        // Check if car is within junction area
+        const zDist = Math.abs(carZ - junctionZ);
+        const xDist = Math.abs(carX - junctionX);
+
+        if (zDist < 5 && xDist < 8) {
+            activeJunction = crossroad;
+
+            // Check if player wants to turn (holding left/right + slow speed)
+            if (speed < 0.8 && speed > 0.1) {
+                // Turn left
+                if (keys['ArrowLeft'] && carX > junctionX - 2 && !playerCar.userData.onSideRoad) {
+                    startTurn('left', junctionX, junctionZ);
+                    return;
+                }
+                // Turn right
+                if (keys['ArrowRight'] && carX < junctionX + 6 && !playerCar.userData.onSideRoad) {
+                    startTurn('right', junctionX, junctionZ);
+                    return;
+                }
+            }
+            return;
+        }
+    }
+
+    activeJunction = null;
+}
+
+// Start a turn at junction
+function startTurn(direction, junctionX, junctionZ) {
+    turningState = direction === 'left' ? 'turning_left' : 'turning_right';
+    turnProgress = 0;
+
+    // Store turn start position
+    playerCar.userData.turnStartX = playerCar.position.x;
+    playerCar.userData.turnStartZ = playerCar.position.z;
+    playerCar.userData.turnJunctionX = junctionX;
+    playerCar.userData.turnJunctionZ = junctionZ;
+    playerCar.userData.turnDirection = direction === 'left' ? -1 : 1;
+
+    // Play turn indicator sound
+    playTurnSound();
+}
+
+// Handle the turning animation
+function handleTurning() {
+    if (turningState === 'none') return;
+
+    const turnSpeed = 0.02;
+    turnProgress += turnSpeed;
+
+    const direction = playerCar.userData.turnDirection;
+    const junctionX = playerCar.userData.turnJunctionX;
+    const junctionZ = playerCar.userData.turnJunctionZ;
+
+    // Smooth turn using arc
+    const turnRadius = 8;
+    const angle = turnProgress * (Math.PI / 2); // 90 degree turn
+
+    if (turnProgress < 1) {
+        // During turn - arc movement
+        if (direction === -1) {
+            // Left turn
+            playerCar.position.x = junctionX - turnRadius * Math.sin(angle);
+            playerCar.position.z = junctionZ - turnRadius * (1 - Math.cos(angle));
+        } else {
+            // Right turn
+            playerCar.position.x = junctionX + 4 + turnRadius * Math.sin(angle);
+            playerCar.position.z = junctionZ - turnRadius * (1 - Math.cos(angle));
+        }
+
+        // Rotate car during turn
+        const targetRotation = Math.PI + direction * angle;
+        playerCar.rotation.y += (targetRotation - playerCar.rotation.y) * 0.15;
+
+        // Apply slight body roll during turn
+        playerCar.rotation.z = -direction * 0.05 * Math.sin(angle * 2);
+
+        // Animate wheels
+        playerCar.children.forEach((child) => {
+            if (child.userData.isWheel) {
+                child.rotation.x -= 0.1;
+            }
+        });
+
+        // Move camera to follow
+        camera.position.x += (playerCar.position.x - camera.position.x) * 0.1;
+        camera.position.z = playerCar.position.z + 6;
+        camera.lookAt(playerCar.position.x, 0.5, playerCar.position.z - 5);
+
+        // Continue updating other game elements
+        updateAudio();
+        distance += 0.3;
+        score += 0.2;
+
+        // Update HUD
+        const displaySpeed = Math.floor(speed * 50);
+        document.getElementById('speed').textContent = displaySpeed;
+        document.getElementById('distance').textContent = Math.floor(distance);
+
+        renderer.render(scene, camera);
+    } else {
+        // Turn complete
+        completeTurn();
+    }
+}
+
+// Complete the turn and set up for side road travel
+function completeTurn() {
+    const direction = playerCar.userData.turnDirection;
+    const junctionX = playerCar.userData.turnJunctionX;
+    const junctionZ = playerCar.userData.turnJunctionZ;
+
+    // Set car on the side road
+    playerCar.userData.onSideRoad = true;
+    playerCar.userData.sideRoadDirection = direction;
+    playerCar.userData.sideRoadOriginZ = junctionZ;
+    playerCar.userData.sideRoadOriginX = junctionX;
+
+    // Position car on side road
+    if (direction === -1) {
+        playerCar.position.x = junctionX - 12;
+        playerCar.rotation.y = Math.PI / 2; // Facing left
+    } else {
+        playerCar.position.x = junctionX + 12;
+        playerCar.rotation.y = -Math.PI / 2; // Facing right
+    }
+    playerCar.position.z = junctionZ;
+
+    // Reset lane offset for side road
+    playerCar.userData.laneOffset = 0;
+
+    // Reset turning state
+    turningState = 'none';
+    turnProgress = 0;
+    activeJunction = null;
+
+    // Award points for successful turn
+    score += 50;
+    playTurnCompleteSound();
+}
+
+// Play turn indicator sound
+function playTurnSound() {
+    if (!audioInitialized || !audioContext) return;
+
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 600;
+
+    gain.gain.value = 0.1;
+    gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.2);
+}
+
+// Play turn complete sound
+function playTurnCompleteSound() {
+    if (!audioInitialized || !audioContext) return;
+
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 800;
+    osc.frequency.linearRampToValueAtTime(1000, audioContext.currentTime + 0.15);
+
+    gain.gain.value = 0.12;
+    gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.2);
+}
+
+// Return to main road from side road
+function returnToMainRoad() {
+    const sideDir = playerCar.userData.sideRoadDirection;
+    const originZ = playerCar.userData.sideRoadOriginZ;
+
+    // Teleport to a new position on the main road ahead
+    // Position car on the main road, further ahead than where they left
+    const newZ = originZ - 100; // Ahead on the road
+    const roadCurve = getRoadCurveAt(newZ);
+
+    playerCar.position.x = roadCurve + 3.5;
+    playerCar.position.z = newZ;
+    playerCar.rotation.y = Math.PI;
+
+    // Reset side road state
+    playerCar.userData.onSideRoad = false;
+    playerCar.userData.sideRoadDirection = 0;
+    playerCar.userData.laneOffset = 3.5;
+    playerCar.userData.velocityX = 0;
+
+    // Reset camera
+    camera.position.x = roadCurve + 1.75;
+    camera.position.z = newZ + 6;
+
+    // Award bonus for exploring side road
+    score += 100;
+    playTurnCompleteSound();
+}
 
 // Update game state
 function updateGame() {
@@ -2180,13 +3546,24 @@ function updateGame() {
     const roadCurveAtCar = getRoadCurveAt(playerCar.position.z);
     const roadDirection = getRoadDirectionAt(playerCar.position.z);
 
+    // Check for junction turning
+    updateJunctionTurning();
+
     // Initialize car userData if needed
     if (playerCar.userData.laneOffset === undefined) {
-        playerCar.userData.laneOffset = 0;
+        playerCar.userData.laneOffset = 3.5; // Start on right side of road
         playerCar.userData.steerAngle = 0;
         playerCar.userData.velocityX = 0;
         playerCar.userData.bodyTilt = 0;
         playerCar.userData.suspensionOffset = 0;
+        playerCar.userData.onSideRoad = false;
+        playerCar.userData.sideRoadDirection = 0; // -1 for left, 1 for right
+    }
+
+    // If currently turning at junction, handle special turning movement
+    if (turningState !== 'none') {
+        handleTurning();
+        return; // Skip normal movement during turn
     }
 
     // Steering input with momentum
@@ -2219,12 +3596,17 @@ function updateGame() {
     // Update lane offset with velocity
     playerCar.userData.laneOffset += playerCar.userData.velocityX;
 
-    // Clamp lane offset to road bounds
-    const maxLaneOffset = 2.8;
+    // Clamp lane offset to road bounds (wider road now)
+    // Right side (player lanes): 0.5 to 6.0
+    // Left side (oncoming - dangerous!): -6.0 to -0.5
+    const maxLaneOffset = 6.0;
+    const minLaneOffset = 0.5; // Keep player slightly right of center median
+
     if (playerCar.userData.laneOffset > maxLaneOffset) {
         playerCar.userData.laneOffset = maxLaneOffset;
         playerCar.userData.velocityX *= -0.3; // Bounce back slightly
     } else if (playerCar.userData.laneOffset < -maxLaneOffset) {
+        // Allow going into oncoming lane (dangerous!)
         playerCar.userData.laneOffset = -maxLaneOffset;
         playerCar.userData.velocityX *= -0.3;
     }
@@ -2238,35 +3620,75 @@ function updateGame() {
     const suspensionTarget = Math.abs(playerCar.userData.velocityX) * 0.02 + (speed > 0.8 ? 0.01 : 0);
     playerCar.userData.suspensionOffset += (suspensionTarget - playerCar.userData.suspensionOffset) * 0.1;
 
-    // Auto-move car forward
-    playerCar.position.z -= speed * 0.5;
+    // Check if on side road - different movement handling
+    if (playerCar.userData.onSideRoad) {
+        // Side road movement - car moves perpendicular to main road
+        const sideDir = playerCar.userData.sideRoadDirection;
 
-    // Update car X position to follow road curve + lane offset
-    playerCar.position.x = roadCurveAtCar + playerCar.userData.laneOffset;
+        // Move along side road (X axis)
+        playerCar.position.x += sideDir * speed * 0.5;
 
-    // Subtle suspension bounce
-    playerCar.position.y = playerCar.userData.suspensionOffset;
+        // Lane offset on side road becomes Z position adjustment
+        playerCar.position.z = playerCar.userData.sideRoadOriginZ + playerCar.userData.laneOffset * sideDir * -0.5;
 
-    // Rotate car to follow road direction plus steering input
-    const steerVisualOffset = playerCar.userData.steerAngle * 0.8; // Car points slightly into turns
-    const targetRotation = Math.PI + roadDirection + steerVisualOffset;
-    playerCar.rotation.y += (targetRotation - playerCar.rotation.y) * 0.12;
+        // Clamp to side road bounds
+        const sideRoadLength = 50;
+        const originX = playerCar.userData.sideRoadOriginX;
 
-    // Smooth camera follow with slight delay
-    const cameraZ = playerCar.position.z + 6;
-    const cameraCurve = getRoadCurveAt(cameraZ);
+        // Check if car has reached end of side road
+        if (sideDir === -1 && playerCar.position.x < originX - sideRoadLength) {
+            // End of left side road - turn back to main road or loop
+            returnToMainRoad();
+        } else if (sideDir === 1 && playerCar.position.x > originX + sideRoadLength) {
+            // End of right side road
+            returnToMainRoad();
+        }
 
-    // Camera smoothly follows car position
-    const targetCamX = cameraCurve + playerCar.userData.laneOffset * 0.5;
-    camera.position.x += (targetCamX - camera.position.x) * 0.08;
-    camera.position.z += (cameraZ - camera.position.z) * 0.15;
-    camera.position.y += (2.0 + speed * 0.3 - camera.position.y) * 0.1;
+        // Rotate car to face side road direction
+        const targetRot = sideDir === -1 ? Math.PI / 2 : -Math.PI / 2;
+        const steerVisualOffset = playerCar.userData.steerAngle * 0.8;
+        playerCar.rotation.y += (targetRot + steerVisualOffset - playerCar.rotation.y) * 0.12;
 
-    // Look ahead along the curve with smooth transition
-    const lookAheadZ = playerCar.position.z - 10;
-    const lookAheadCurve = getRoadCurveAt(lookAheadZ);
-    const lookAtX = lookAheadCurve + playerCar.userData.laneOffset * 0.4;
-    camera.lookAt(lookAtX, 0.5, lookAheadZ);
+        // Subtle suspension bounce
+        playerCar.position.y = playerCar.userData.suspensionOffset;
+
+        // Camera follows on side road
+        camera.position.z += (playerCar.position.z + 3 * sideDir - camera.position.z) * 0.1;
+        camera.position.x += (playerCar.position.x + sideDir * -8 - camera.position.x) * 0.1;
+        camera.position.y += (2.5 - camera.position.y) * 0.1;
+        camera.lookAt(playerCar.position.x, 0.5, playerCar.position.z);
+    } else {
+        // Normal main road movement
+        // Auto-move car forward
+        playerCar.position.z -= speed * 0.5;
+
+        // Update car X position to follow road curve + lane offset
+        playerCar.position.x = roadCurveAtCar + playerCar.userData.laneOffset;
+
+        // Subtle suspension bounce
+        playerCar.position.y = playerCar.userData.suspensionOffset;
+
+        // Rotate car to follow road direction plus steering input
+        const steerVisualOffset = playerCar.userData.steerAngle * 0.8; // Car points slightly into turns
+        const targetRotation = Math.PI + roadDirection + steerVisualOffset;
+        playerCar.rotation.y += (targetRotation - playerCar.rotation.y) * 0.12;
+
+        // Smooth camera follow with slight delay
+        const cameraZ = playerCar.position.z + 6;
+        const cameraCurve = getRoadCurveAt(cameraZ);
+
+        // Camera smoothly follows car position
+        const targetCamX = cameraCurve + playerCar.userData.laneOffset * 0.5;
+        camera.position.x += (targetCamX - camera.position.x) * 0.08;
+        camera.position.z += (cameraZ - camera.position.z) * 0.15;
+        camera.position.y += (2.0 + speed * 0.3 - camera.position.y) * 0.1;
+
+        // Look ahead along the curve with smooth transition
+        const lookAheadZ = playerCar.position.z - 10;
+        const lookAheadCurve = getRoadCurveAt(lookAheadZ);
+        const lookAtX = lookAheadCurve + playerCar.userData.laneOffset * 0.4;
+        camera.lookAt(lookAtX, 0.5, lookAheadZ);
+    }
 
     // Rotate wheels
     playerCar.children.forEach((child) => {
@@ -2288,12 +3710,17 @@ function updateGame() {
     // Update traffic lights and crossroads
     updateTrafficLights(1 / 60);
 
+    // Update autonomous vehicles
+    updateAutonomousVehicles();
+
     // Update HUD
     const displaySpeed = Math.floor(speed * 100);
     document.getElementById('speed').textContent = displaySpeed;
     document.getElementById('distance').textContent = Math.floor(distance);
     document.getElementById('pedestriansAvoided').textContent = pedestriansAvoided;
     document.getElementById('redLightsRan').textContent = ranRedLights;
+    document.getElementById('vehiclesOvertaken').textContent = vehiclesOvertaken;
+    document.getElementById('nearMisses').textContent = nearMisses;
 
     // Update speedometer needle and arc
     updateSpeedometer(displaySpeed);
@@ -2368,11 +3795,11 @@ function startGame() {
 
     // Reset player position and physics
     const startCurve = getRoadCurveAt(2);
-    playerCar.position.set(startCurve, 0, 2);
+    playerCar.position.set(startCurve + 3.5, 0, 2); // Start on right side
     playerCar.rotation.set(0, Math.PI, 0);
 
     // Reset car physics userData
-    playerCar.userData.laneOffset = 0;
+    playerCar.userData.laneOffset = 3.5; // Start on right side of road
     playerCar.userData.steerAngle = 0;
     playerCar.userData.velocityX = 0;
     playerCar.userData.bodyTilt = 0;
@@ -2407,6 +3834,24 @@ function startGame() {
     // Spawn initial crossroads
     spawnCrossroad(-50);
     spawnCrossroad(-130);
+
+    // Clear and reset autonomous vehicles
+    autonomousVehicles.forEach(v => scene.remove(v));
+    autonomousVehicles = [];
+    lastVehicleZ = -30;
+    lastOncomingVehicleZ = -50;
+    vehiclesOvertaken = 0;
+    nearMisses = 0;
+
+    // Spawn initial vehicles (same direction)
+    for (let i = 0; i < 5; i++) {
+        spawnVehicle(-40 - i * 25);
+    }
+
+    // Spawn initial oncoming vehicles
+    for (let i = 0; i < 3; i++) {
+        spawnOncomingVehicle(-60 - i * 35);
+    }
 }
 
 // Restart game
