@@ -5,8 +5,8 @@ let gameActive = false;
 let score = 0;
 let distance = 0;
 let speed = 0;
-let baseSpeed = 0.1;
-let maxSpeed = 1.2;
+let baseSpeed = 0;
+let maxSpeed = 2.2;
 let acceleration = 0.02;
 let keys = {};
 let environmentObjects = [];
@@ -1079,21 +1079,20 @@ function updateEnvironment() {
 function createRoad() {
     road = new THREE.Group();
 
-    // Initialize road segments
+    // Initialize road segments at fixed world positions
     for (let i = 0; i < ROAD_VISIBLE_SEGMENTS; i++) {
-        const segment = createRoadSegment(i);
+        const segmentZ = -i * ROAD_SEGMENT_LENGTH + 50; // Start ahead of player
+        const segment = createRoadSegment(i, segmentZ);
         roadSegments.push(segment);
         road.add(segment.group);
     }
 
     scene.add(road);
-    updateRoadCurves();
 }
 
-// Create a single road segment
-function createRoadSegment(index) {
+// Create a single road segment at a specific Z position
+function createRoadSegment(index, worldZ) {
     const segmentGroup = new THREE.Group();
-    const z = -index * ROAD_SEGMENT_LENGTH;
 
     // Road shoulder/dirt edge
     const shoulderGeometry = new THREE.PlaneGeometry(9, ROAD_SEGMENT_LENGTH + 0.5);
@@ -1159,12 +1158,19 @@ function createRoadSegment(index) {
     rightGuardRail.castShadow = true;
     segmentGroup.add(rightGuardRail);
 
-    segmentGroup.position.z = z;
+    // Set segment position with curve applied
+    segmentGroup.position.z = worldZ;
+    const curveX = getRoadCurveAt(worldZ);
+    segmentGroup.position.x = curveX;
+
+    // Rotate segment to follow curve direction
+    const direction = getRoadDirectionAt(worldZ);
+    segmentGroup.rotation.y = direction;
 
     return {
         group: segmentGroup,
-        baseZ: z,
-        curveX: 0,
+        worldZ: worldZ,
+        curveX: curveX,
         index: index
     };
 }
@@ -1186,33 +1192,31 @@ function getRoadDirectionAt(z) {
     return Math.atan2(x2 - x1, delta * 2);
 }
 
-// Update road segment positions based on player position
+// Update road segment positions - only recycle segments that are behind the player
 function updateRoadCurves() {
-    const playerZ = playerCar ? playerCar.position.z : 0;
+    if (!playerCar) return;
 
-    roadSegments.forEach((segment, index) => {
-        // Calculate segment's world Z position
-        let segmentZ = playerZ - (index - 5) * ROAD_SEGMENT_LENGTH;
+    const playerZ = playerCar.position.z;
+    const recycleDistance = 30; // Distance behind player to recycle
+    const totalRoadLength = ROAD_VISIBLE_SEGMENTS * ROAD_SEGMENT_LENGTH;
 
-        // Wrap segments that are too far behind to the front
-        while (segmentZ > playerZ + ROAD_SEGMENT_LENGTH * 10) {
-            segmentZ -= ROAD_VISIBLE_SEGMENTS * ROAD_SEGMENT_LENGTH;
+    roadSegments.forEach((segment) => {
+        // Check if segment is too far behind the player
+        if (segment.worldZ > playerZ + recycleDistance) {
+            // Move this segment to the front of the road
+            segment.worldZ -= totalRoadLength;
+
+            // Update position with curve
+            segment.group.position.z = segment.worldZ;
+            const curveX = getRoadCurveAt(segment.worldZ);
+            segment.group.position.x = curveX;
+
+            // Rotate segment to follow curve direction
+            const direction = getRoadDirectionAt(segment.worldZ);
+            segment.group.rotation.y = direction;
+
+            segment.curveX = curveX;
         }
-        while (segmentZ < playerZ - ROAD_SEGMENT_LENGTH * (ROAD_VISIBLE_SEGMENTS - 10)) {
-            segmentZ += ROAD_VISIBLE_SEGMENTS * ROAD_SEGMENT_LENGTH;
-        }
-
-        segment.group.position.z = segmentZ;
-
-        // Apply curve offset
-        const curveX = getRoadCurveAt(segmentZ);
-        segment.group.position.x = curveX;
-
-        // Rotate segment to follow curve direction
-        const direction = getRoadDirectionAt(segmentZ);
-        segment.group.rotation.y = direction;
-
-        segment.curveX = curveX;
     });
 }
 
@@ -1623,9 +1627,8 @@ function startGame() {
     playerCar.rotation.y = Math.PI;
     playerCar.userData.laneOffset = 0;
 
-    // Reset road segments
+    // Reset environment tracking
     lastTreeZ = 10;
-    updateRoadCurves();
 }
 
 // Restart game
