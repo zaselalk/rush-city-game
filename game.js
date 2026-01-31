@@ -610,6 +610,318 @@ function createRock(x, z) {
     return rock;
 }
 
+// Create a simple house
+function createHouse(x, z) {
+    const houseGroup = new THREE.Group();
+    const scale = 0.8 + Math.random() * 0.4;
+
+    // Wall colors
+    const wallColors = [0xe8dcc8, 0xd4c4a8, 0xc9b896, 0xbfae86, 0xf5ebe0];
+    const wallColor = wallColors[Math.floor(Math.random() * wallColors.length)];
+    const wallMaterial = new THREE.MeshStandardMaterial({
+        color: wallColor,
+        roughness: 0.9
+    });
+
+    // Main building
+    const width = (1.5 + Math.random() * 1) * scale;
+    const height = (1.5 + Math.random() * 0.8) * scale;
+    const depth = (1.5 + Math.random() * 1) * scale;
+
+    const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+    const building = new THREE.Mesh(buildingGeometry, wallMaterial);
+    building.position.y = height / 2;
+    building.castShadow = true;
+    building.receiveShadow = true;
+    houseGroup.add(building);
+
+    // Roof
+    const roofColors = [0x8b4513, 0xa0522d, 0x6b3a0f, 0x654321, 0xcc4444];
+    const roofColor = roofColors[Math.floor(Math.random() * roofColors.length)];
+    const roofMaterial = new THREE.MeshStandardMaterial({
+        color: roofColor,
+        roughness: 0.8
+    });
+
+    const roofGeometry = new THREE.ConeGeometry(width * 0.85, height * 0.6, 4);
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.position.y = height + height * 0.25;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    houseGroup.add(roof);
+
+    // Door
+    const doorMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a3728,
+        roughness: 0.8
+    });
+    const doorGeometry = new THREE.BoxGeometry(width * 0.25, height * 0.45, 0.05);
+    const door = new THREE.Mesh(doorGeometry, doorMaterial);
+    door.position.set(0, height * 0.22, depth / 2 + 0.02);
+    houseGroup.add(door);
+
+    // Windows
+    const windowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x87ceeb,
+        metalness: 0.5,
+        roughness: 0.1
+    });
+    const windowGeometry = new THREE.BoxGeometry(width * 0.2, height * 0.2, 0.05);
+
+    const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
+    window1.position.set(-width * 0.25, height * 0.55, depth / 2 + 0.02);
+    houseGroup.add(window1);
+
+    const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
+    window2.position.set(width * 0.25, height * 0.55, depth / 2 + 0.02);
+    houseGroup.add(window2);
+
+    houseGroup.position.set(x, 0, z);
+    houseGroup.rotation.y = Math.random() * Math.PI * 2;
+    return houseGroup;
+}
+
+// Create a tall office/apartment building
+function createTallBuilding(x, z) {
+    const buildingGroup = new THREE.Group();
+    const scale = 0.8 + Math.random() * 0.4;
+
+    // Building dimensions
+    const width = (1.5 + Math.random() * 1.5) * scale;
+    const height = (4 + Math.random() * 4) * scale;
+    const depth = (1.5 + Math.random() * 1.5) * scale;
+
+    // Building colors - modern concrete/glass look
+    const buildingColors = [0x808080, 0x696969, 0x778899, 0x5a5a5a, 0x6b7b8a];
+    const buildingColor = buildingColors[Math.floor(Math.random() * buildingColors.length)];
+    const buildingMaterial = new THREE.MeshStandardMaterial({
+        color: buildingColor,
+        roughness: 0.7,
+        metalness: 0.2
+    });
+
+    // Main structure
+    const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+    building.position.y = height / 2;
+    building.castShadow = true;
+    building.receiveShadow = true;
+    buildingGroup.add(building);
+
+    // Windows grid
+    const windowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a90a4,
+        metalness: 0.8,
+        roughness: 0.1,
+        emissive: 0x1a3040,
+        emissiveIntensity: 0.2
+    });
+
+    const floors = Math.floor(height / (0.8 * scale));
+    const windowsPerFloor = Math.floor(width / (0.5 * scale));
+
+    for (let floor = 0; floor < floors; floor++) {
+        for (let w = 0; w < windowsPerFloor; w++) {
+            const windowGeometry = new THREE.BoxGeometry(0.3 * scale, 0.4 * scale, 0.05);
+            const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+            windowMesh.position.set(
+                -width / 2 + 0.3 * scale + w * (0.5 * scale),
+                0.5 * scale + floor * (0.8 * scale),
+                depth / 2 + 0.02
+            );
+            buildingGroup.add(windowMesh);
+        }
+    }
+
+    // Rooftop details
+    const rooftopGeometry = new THREE.BoxGeometry(width * 0.3, 0.5 * scale, depth * 0.3);
+    const rooftopMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a4a4a,
+        roughness: 0.9
+    });
+    const rooftop = new THREE.Mesh(rooftopGeometry, rooftopMaterial);
+    rooftop.position.y = height + 0.25 * scale;
+    rooftop.castShadow = true;
+    buildingGroup.add(rooftop);
+
+    buildingGroup.position.set(x, 0, z);
+    buildingGroup.rotation.y = Math.random() * Math.PI * 0.5;
+    return buildingGroup;
+}
+
+// Create a barn/farm building
+function createBarn(x, z) {
+    const barnGroup = new THREE.Group();
+    const scale = 0.9 + Math.random() * 0.3;
+
+    // Barn body
+    const barnMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b2500,
+        roughness: 0.9
+    });
+
+    const width = 2.5 * scale;
+    const height = 2 * scale;
+    const depth = 3 * scale;
+
+    const bodyGeometry = new THREE.BoxGeometry(width, height, depth);
+    const body = new THREE.Mesh(bodyGeometry, barnMaterial);
+    body.position.y = height / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    barnGroup.add(body);
+
+    // Barn roof (gambrel style - simplified)
+    const roofMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a4a4a,
+        roughness: 0.8
+    });
+
+    const roofGeometry = new THREE.BoxGeometry(width * 1.1, 0.15 * scale, depth * 1.05);
+    const roofLower1 = new THREE.Mesh(roofGeometry, roofMaterial);
+    roofLower1.position.set(-width * 0.35, height + 0.3 * scale, 0);
+    roofLower1.rotation.z = 0.5;
+    roofLower1.castShadow = true;
+    barnGroup.add(roofLower1);
+
+    const roofLower2 = new THREE.Mesh(roofGeometry, roofMaterial);
+    roofLower2.position.set(width * 0.35, height + 0.3 * scale, 0);
+    roofLower2.rotation.z = -0.5;
+    roofLower2.castShadow = true;
+    barnGroup.add(roofLower2);
+
+    const roofTopGeometry = new THREE.BoxGeometry(width * 0.6, 0.15 * scale, depth * 1.05);
+    const roofTop = new THREE.Mesh(roofTopGeometry, roofMaterial);
+    roofTop.position.y = height + 0.7 * scale;
+    roofTop.castShadow = true;
+    barnGroup.add(roofTop);
+
+    // Barn doors
+    const doorMaterial = new THREE.MeshStandardMaterial({
+        color: 0x5a1a00,
+        roughness: 0.9
+    });
+
+    const doorGeometry = new THREE.BoxGeometry(width * 0.6, height * 0.7, 0.1);
+    const doors = new THREE.Mesh(doorGeometry, doorMaterial);
+    doors.position.set(0, height * 0.35, depth / 2 + 0.05);
+    barnGroup.add(doors);
+
+    // White trim
+    const trimMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.8
+    });
+
+    const trimGeometry = new THREE.BoxGeometry(width * 0.05, height, 0.05);
+    const trim1 = new THREE.Mesh(trimGeometry, trimMaterial);
+    trim1.position.set(-width / 2 + 0.05, height / 2, depth / 2 + 0.03);
+    barnGroup.add(trim1);
+
+    const trim2 = new THREE.Mesh(trimGeometry, trimMaterial);
+    trim2.position.set(width / 2 - 0.05, height / 2, depth / 2 + 0.03);
+    barnGroup.add(trim2);
+
+    barnGroup.position.set(x, 0, z);
+    barnGroup.rotation.y = Math.random() * Math.PI * 2;
+    return barnGroup;
+}
+
+// Create a small shop/store
+function createShop(x, z) {
+    const shopGroup = new THREE.Group();
+    const scale = 0.8 + Math.random() * 0.3;
+
+    // Shop colors
+    const shopColors = [0xffd700, 0xff6b6b, 0x4ecdc4, 0x95e1d3, 0xf38181];
+    const shopColor = shopColors[Math.floor(Math.random() * shopColors.length)];
+
+    const width = 2 * scale;
+    const height = 1.8 * scale;
+    const depth = 2 * scale;
+
+    // Main building
+    const buildingMaterial = new THREE.MeshStandardMaterial({
+        color: shopColor,
+        roughness: 0.8
+    });
+
+    const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+    building.position.y = height / 2;
+    building.castShadow = true;
+    building.receiveShadow = true;
+    shopGroup.add(building);
+
+    // Flat roof with overhang
+    const roofMaterial = new THREE.MeshStandardMaterial({
+        color: 0x3a3a3a,
+        roughness: 0.9
+    });
+
+    const roofGeometry = new THREE.BoxGeometry(width * 1.15, 0.1 * scale, depth * 1.1);
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.position.y = height + 0.05 * scale;
+    roof.castShadow = true;
+    shopGroup.add(roof);
+
+    // Awning
+    const awningMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcc3333,
+        roughness: 0.7,
+        side: THREE.DoubleSide
+    });
+
+    const awningGeometry = new THREE.BoxGeometry(width * 0.9, 0.05 * scale, 0.6 * scale);
+    const awning = new THREE.Mesh(awningGeometry, awningMaterial);
+    awning.position.set(0, height * 0.75, depth / 2 + 0.3 * scale);
+    awning.rotation.x = -0.2;
+    shopGroup.add(awning);
+
+    // Large front window
+    const windowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x87ceeb,
+        metalness: 0.6,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    const windowGeometry = new THREE.BoxGeometry(width * 0.7, height * 0.4, 0.05);
+    const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+    frontWindow.position.set(0, height * 0.45, depth / 2 + 0.03);
+    shopGroup.add(frontWindow);
+
+    // Door
+    const doorMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4a3728,
+        roughness: 0.8
+    });
+
+    const doorGeometry = new THREE.BoxGeometry(width * 0.25, height * 0.5, 0.05);
+    const door = new THREE.Mesh(doorGeometry, doorMaterial);
+    door.position.set(width * 0.3, height * 0.25, depth / 2 + 0.03);
+    shopGroup.add(door);
+
+    shopGroup.position.set(x, 0, z);
+    shopGroup.rotation.y = Math.random() * Math.PI * 2;
+    return shopGroup;
+}
+
+// Create random building type
+function createBuilding(x, z) {
+    const buildingType = Math.random();
+    if (buildingType < 0.35) {
+        return createHouse(x, z);
+    } else if (buildingType < 0.55) {
+        return createTallBuilding(x, z);
+    } else if (buildingType < 0.75) {
+        return createBarn(x, z);
+    } else {
+        return createShop(x, z);
+    }
+}
+
 // Create grass ground - much larger to prevent seeing edges
 function createGround() {
     const groundGeometry = new THREE.PlaneGeometry(300, 800);
@@ -704,6 +1016,21 @@ function generateEnvironmentAtZ(z) {
         rock.userData.isEnvironment = true;
         environmentObjects.push(rock);
         scene.add(rock);
+    }
+
+    // Buildings (less frequent, further from road)
+    if (Math.random() > 0.85) {
+        const building = createBuilding(-10 - Math.random() * 8, z);
+        building.userData.isEnvironment = true;
+        environmentObjects.push(building);
+        scene.add(building);
+    }
+
+    if (Math.random() > 0.85) {
+        const building = createBuilding(10 + Math.random() * 8, z);
+        building.userData.isEnvironment = true;
+        environmentObjects.push(building);
+        scene.add(building);
     }
 }
 
