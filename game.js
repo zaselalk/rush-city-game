@@ -1178,9 +1178,10 @@ function createRoadSegment(index, worldZ) {
 // Generate curve offset for a position
 function getRoadCurveAt(z) {
     // Use multiple sine waves for natural-looking curves
-    const curve1 = Math.sin(z * 0.008) * 12;
-    const curve2 = Math.sin(z * 0.003 + 1.5) * 8;
-    const curve3 = Math.sin(z * 0.015) * 4;
+    // Lower frequency = longer, more gradual curves
+    const curve1 = Math.sin(z * 0.004) * 18;  // Long sweeping curves
+    const curve2 = Math.sin(z * 0.0015 + 1.5) * 12; // Very long gentle curves
+    const curve3 = Math.sin(z * 0.008) * 6;   // Medium curves for variety
     return curve1 + curve2 + curve3;
 }
 
@@ -1532,27 +1533,63 @@ function updateGame() {
     const roadCurveAtCar = getRoadCurveAt(playerCar.position.z);
     const roadDirection = getRoadDirectionAt(playerCar.position.z);
 
-    // Calculate lane offset (car's position relative to road center)
-    // Store lane position separately from world position
+    // Initialize car userData if needed
     if (playerCar.userData.laneOffset === undefined) {
         playerCar.userData.laneOffset = 0;
+        playerCar.userData.steerAngle = 0;
+        playerCar.userData.velocityX = 0;
+        playerCar.userData.bodyTilt = 0;
+        playerCar.userData.suspensionOffset = 0;
     }
 
-    // Move player car with smooth steering (within lane bounds)
-    let targetTilt = 0;
-    const steerSpeed = 0.08 * (1 + speed * 0.3);
+    // Steering input with momentum
+    const maxSteerAngle = 0.035;
+    const steerResponse = 0.12; // How fast steering responds
+    const steerReturn = 0.08; // How fast steering returns to center
+    let targetSteer = 0;
 
     if (keys['ArrowLeft']) {
-        playerCar.userData.laneOffset = Math.max(playerCar.userData.laneOffset - steerSpeed, -2.8);
-        targetTilt = 0.08;
+        targetSteer = -maxSteerAngle * (1 + speed * 0.5);
     }
     if (keys['ArrowRight']) {
-        playerCar.userData.laneOffset = Math.min(playerCar.userData.laneOffset + steerSpeed, 2.8);
-        targetTilt = -0.08;
+        targetSteer = maxSteerAngle * (1 + speed * 0.5);
     }
 
-    // Smooth car tilt when turning
-    playerCar.rotation.z += (targetTilt - playerCar.rotation.z) * 0.1;
+    // Smooth steering angle transition
+    if (targetSteer !== 0) {
+        playerCar.userData.steerAngle += (targetSteer - playerCar.userData.steerAngle) * steerResponse;
+    } else {
+        playerCar.userData.steerAngle *= (1 - steerReturn);
+    }
+
+    // Apply steering to velocity with momentum
+    const lateralAcceleration = playerCar.userData.steerAngle * speed * 2;
+    playerCar.userData.velocityX += lateralAcceleration;
+
+    // Apply friction/drag to lateral velocity
+    playerCar.userData.velocityX *= 0.92;
+
+    // Update lane offset with velocity
+    playerCar.userData.laneOffset += playerCar.userData.velocityX;
+
+    // Clamp lane offset to road bounds
+    const maxLaneOffset = 2.8;
+    if (playerCar.userData.laneOffset > maxLaneOffset) {
+        playerCar.userData.laneOffset = maxLaneOffset;
+        playerCar.userData.velocityX *= -0.3; // Bounce back slightly
+    } else if (playerCar.userData.laneOffset < -maxLaneOffset) {
+        playerCar.userData.laneOffset = -maxLaneOffset;
+        playerCar.userData.velocityX *= -0.3;
+    }
+
+    // Calculate body roll (tilt) based on lateral acceleration
+    const targetTilt = -playerCar.userData.velocityX * 1.5;
+    playerCar.userData.bodyTilt += (targetTilt - playerCar.userData.bodyTilt) * 0.15;
+    playerCar.rotation.z = playerCar.userData.bodyTilt;
+
+    // Suspension effect (slight up/down based on speed changes and turning)
+    const suspensionTarget = Math.abs(playerCar.userData.velocityX) * 0.02 + (speed > 0.8 ? 0.01 : 0);
+    playerCar.userData.suspensionOffset += (suspensionTarget - playerCar.userData.suspensionOffset) * 0.1;
 
     // Auto-move car forward
     playerCar.position.z -= speed * 0.5;
@@ -1560,21 +1597,29 @@ function updateGame() {
     // Update car X position to follow road curve + lane offset
     playerCar.position.x = roadCurveAtCar + playerCar.userData.laneOffset;
 
-    // Rotate car to follow road direction
-    const targetRotation = Math.PI + roadDirection;
-    playerCar.rotation.y += (targetRotation - playerCar.rotation.y) * 0.1;
+    // Subtle suspension bounce
+    playerCar.position.y = playerCar.userData.suspensionOffset;
 
-    // Move camera to follow car along the curved road
+    // Rotate car to follow road direction plus steering input
+    const steerVisualOffset = playerCar.userData.steerAngle * 0.8; // Car points slightly into turns
+    const targetRotation = Math.PI + roadDirection + steerVisualOffset;
+    playerCar.rotation.y += (targetRotation - playerCar.rotation.y) * 0.12;
+
+    // Smooth camera follow with slight delay
     const cameraZ = playerCar.position.z + 6;
     const cameraCurve = getRoadCurveAt(cameraZ);
-    camera.position.z = cameraZ;
-    camera.position.x = cameraCurve + playerCar.userData.laneOffset * 0.4;
-    camera.position.y = 2.0 + speed * 0.3;
 
-    // Look ahead along the curve
-    const lookAheadZ = playerCar.position.z - 8;
+    // Camera smoothly follows car position
+    const targetCamX = cameraCurve + playerCar.userData.laneOffset * 0.5;
+    camera.position.x += (targetCamX - camera.position.x) * 0.08;
+    camera.position.z += (cameraZ - camera.position.z) * 0.15;
+    camera.position.y += (2.0 + speed * 0.3 - camera.position.y) * 0.1;
+
+    // Look ahead along the curve with smooth transition
+    const lookAheadZ = playerCar.position.z - 10;
     const lookAheadCurve = getRoadCurveAt(lookAheadZ);
-    camera.lookAt(lookAheadCurve + playerCar.userData.laneOffset * 0.3, 0.5, lookAheadZ);
+    const lookAtX = lookAheadCurve + playerCar.userData.laneOffset * 0.4;
+    camera.lookAt(lookAtX, 0.5, lookAheadZ);
 
     // Rotate wheels
     playerCar.children.forEach((child) => {
@@ -1620,12 +1665,17 @@ function startGame() {
     initAudio();
     playStartEngineSound();
 
-    // Reset player position and lane offset
+    // Reset player position and physics
     const startCurve = getRoadCurveAt(2);
     playerCar.position.set(startCurve, 0, 2);
-    playerCar.rotation.z = 0;
-    playerCar.rotation.y = Math.PI;
+    playerCar.rotation.set(0, Math.PI, 0);
+
+    // Reset car physics userData
     playerCar.userData.laneOffset = 0;
+    playerCar.userData.steerAngle = 0;
+    playerCar.userData.velocityX = 0;
+    playerCar.userData.bodyTilt = 0;
+    playerCar.userData.suspensionOffset = 0;
 
     // Reset environment tracking
     lastTreeZ = 10;
